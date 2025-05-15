@@ -1,0 +1,115 @@
+ -- [Q1] Which was the most frequent crime committed each week? 
+   
+SELECT CRIME_TYPE,
+       CRIME_CODE,
+       WEEK_NUMBER, 
+       NO_OF_CRIMES
+FROM(
+      SELECT CRIME_TYPE,
+			 CRIME_CODE,
+             WEEK_NUMBER,
+             COUNT(*) AS NO_OF_CRIMES,
+             RANK() OVER  ( PARTITION BY WEEK_NUMBER ORDER BY COUNT(*) DESC) AS RNK
+		FROM REP_LOC_OFF_V
+        GROUP BY CRIME_TYPE, CRIME_CODE, WEEK_NUMBER) AS FREQUENT_CRIMES
+        WHERE RNK =1
+        ORDER BY WEEK_NUMBER;
+        
+-- [Q2] Is crime more prevalent in areas with a higher population density, fewer police personnel, and a larger precinct area?
+
+SELECT AREA_NAME,
+       POPULATION_DENSITY,
+       COUNT(DISTINCT OFFICER_CODE) AS NO_OF_OFFICERS,
+       COUNT(DISTINCT CRIME_CODE) AS NO_OF_CRIMES,
+       RANK() OVER ( ORDER BY POPULATION_DENSITY DESC) AS POD_RNK,
+       RANK() OVER ( ORDER BY COUNT(DISTINCT OFFICER_CODE)DESC) AS OFF_RNK,
+       RANK() OVER ( ORDER BY COUNT(DISTINCT CRIME_CODE)DESC) AS CRIME_RNK
+	FROM REP_LOC_OFF_V
+    GROUP BY AREA_NAME, POPULATION_DENSITY
+    ORDER BY CRIME_RNK;
+
+ -- [Q3] At what points of the day is the crime rate at its peak? Group this by the type of crime.
+    
+    SELECT WEEK_NUMBER,CRIME_TYPE,TIME_DAY,NO_OF_CRIME
+    FROM (
+           SELECT
+                  WEEK_NUMBER,
+                  CRIME_TYPE,
+                  TIME_F(INCIDENT_TIME) AS TIME_DAY,
+                  COUNT(*) AS NO_OF_CRIME,
+                  RANK() OVER (PARTITION BY WEEK_NUMBER ORDER BY COUNT(*) DESC) AS RANKING
+			FROM REP_LOC_OFF_V
+            GROUP BY 1,2,3) RANKED
+            WHERE RANKING = 1;
+    
+      -- [Q4] At what point in the day do more crimes occur in a different locality?
+      
+ SELECT AREA_NAME, 
+        TIME_DAY,
+        CRIME_COUNT
+FROM (SELECT AREA_NAME,
+        TIME_DAY, 
+        CRIME_COUNT,
+        RANK() OVER (PARTITION BY AREA_NAME ORDER BY CRIME_COUNT DESC) AS RANKING
+   FROM
+       (SELECT AREA_NAME,
+          COUNT(*) AS CRIME_COUNT,
+          TIME_F(INCIDENT_TIME) AS TIME_DAY
+		FROM REP_LOC_OFF_V
+        GROUP BY 1,3) AS CRIME_COUNT) AS CRIMES
+        WHERE RANKING = 1;
+        
+        
+         -- [Q5] Which age group of people is more likely to fall victim to crimes at certain points in the day?
+  SELECT
+       AGE_F(VICTIM_AGE) AS AGE_GROUP,
+       TIME_F(INCIDENT_TIME) AS TIME_DAY,
+       COUNT(*) AS CRIME_COUNT
+       FROM REP_VICT_V
+       GROUP BY AGE_GROUP,TIME_DAY
+       ORDER BY CRIME_COUNT;
+     
+-- [Q6] What is the status of reported crimes?.
+
+SELECT CASE_STATUS_DESC,
+ COUNT(CRIME_TYPE) CRIME_COUNT
+FROM REP_LOC_OFF_V
+GROUP BY CASE_STATUS_DESC;
+
+-- [Q7] Does the existence of CCTV cameras deter crimes from happening?
+  SELECT DISTINCT AREA_NAME,
+                  CCTV_COUNT,
+  COUNT(CRIME_TYPE) AS RATE_OF_CRIME
+  FROM REP_LOC_OFF_V
+  GROUP BY 1,2
+  ORDER BY AREA_NAME DESC;
+
+ -- [Q8] How much footage has been recovered from the CCTV at the crime scene?
+ SELECT SUM(RECOVERED_FOOTAGE) AS FOOTAGE_RECOVERED,
+        SUM(UNRECOVERED_FOOTAGE) AS FOOTAGE_UNRECOVERED
+ FROM
+ (SELECT AREA_NAME,
+  SUM( CASE WHEN CCTV_FLAG = "TRUE" THEN 1
+  ELSE 0 END) AS RECOVERED_FOOTAGE,
+  SUM( CASE WHEN CCTV_FLAG = "FALSE" THEN 1
+  ELSE 0 END) AS UNRECOVERED_FOOTAGE
+  FROM REP_LOC_OFF_V
+  GROUP BY AREA_NAME
+  ORDER BY RECOVERED_FOOTAGE,UNRECOVERED_FOOTAGE) AS TOTAL_FOOTAGE;
+  
+  -- [Q9] Is crime more likely to be committed by relation of victims than strangers?
+ SELECT DISTINCT CRIME_TYPE,
+ SUM(OFFENDER_RELATION ="YES") AS COMMITTED_BY_RELATIONS,
+ SUM(OFFENDER_RELATION = "NO") AS COMMITTED_BY_STRANGERS,
+ IF(SUM(OFFENDER_RELATION ="YES") > SUM(OFFENDER_RELATION = "NO"),
+ "LIKELY_BY_RELATION","LIKELY_BY_STRANGERS") AS PROBABILITY_CRIME
+ FROM REP_VICT_V
+ GROUP BY CRIME_TYPE;
+
+-- [Q10] What are the methods used by the public to report a crime? 
+ 
+ SELECT CRIME_TYPE,COMPLAINT_TYPE,
+ COUNT( CRIME_TYPE) AS COUNT_CRIME
+ FROM CRIME.REP_LOC_OFF_V
+ GROUP BY COMPLAINT_TYPE,CRIME_TYPE;
+  
